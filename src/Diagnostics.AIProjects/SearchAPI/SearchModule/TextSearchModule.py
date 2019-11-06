@@ -2,8 +2,10 @@ import os, gc, shutil, uuid
 from SearchModule.Logger import loggerInstance
 from datetime import datetime, timezone
 import json
+import numpy as np
 from SearchModule.ModelInfo import ModelInfo
 from SearchModule.TokenizerModule import *
+from SearchModule.Word2VecProvider import Word2VecProvider
 
 from gensim.models import TfidfModel
 from gensim import corpora, similarities
@@ -41,7 +43,7 @@ packageFileNames = {
     "modelInfo": "ModelInfo.json"
 }
 
-optionalFiles = ["mappingsFile", "modelInfo"]
+optionalFiles = ["mappingsFile", "modelInfo", "m1IndexFile"]
 
 modelsPath = "models"
 def copyFolder(src, dst):
@@ -128,7 +130,11 @@ class TextSearchModel:
         except:
             raise ModelFileLoadFailed("Failed to load model from file " + self.packageFiles["m1ModelFile"])
         try:
-            self.models["m1Index"] = similarities.MatrixSimilarity.load(self.packageFiles["m1IndexFile"])
+            if self.models["modelInfo"].useWord2Vec:
+                self.models["m1Index"] = np.load(self.packageFiles["m1IndexFile"].replace("index", "dat.npy"))
+                self.models["w2vProvider"] = Word2VecProvider(absPath(modelpackagepath))
+            else:
+                self.models["m1Index"] = similarities.MatrixSimilarity.load(self.packageFiles["m1IndexFile"])
         except:
             raise ModelFileLoadFailed("Failed to load index from file " + self.packageFiles["m1IndexFile"])
         try:
@@ -171,12 +177,25 @@ class TextSearchModel:
         else:
             return None
 
+    def cosineDistance(self, vector1, vector2):
+        mag_1 = np.linalg.norm(vector1)
+        mag_2 = np.linalg.norm(vector2)
+        res = 0
+        if mag_1>0 and mag_2>0:
+            res = np.dot(vector1, vector2)/(mag_1*mag_2)
+        return round(res, 2)
+
     def queryDetectors(self, query=None):
         if query:
             try:
                 vector = self.models["m1Model"][self.models["dictionary"].doc2bow(getAllNGrams(query, self.models["modelInfo"].textNGrams))]
-                if self.models["modelInfo"].detectorContentSplitted:    
-                    similar_doc_indices = sorted(enumerate(self.models["m1Index"][vector]), key=lambda item: -item[1])[:10]
+                if self.models["modelInfo"].detectorContentSplitted:
+                    if self.models["modelInfo"].useWord2Vec:
+                        query_w2v = self.models["w2vProvider"].tfIdf2W2V(vector)
+                        similarities = np.apply_along_axis(lambda x: float(self.cosineDistance(x, query_w2v)), 1, self.models["m1Index"])
+                        similar_doc_indices = sorted(list(enumerate(similarities)), key=lambda x: x[1], reverse=True)[:10]
+                    else:
+                        similar_doc_indices = sorted(enumerate(self.models["m1Index"][vector]), key=lambda item: -item[1])[:10]
                     similar_docs = []
                     for x in similar_doc_indices:
                         detector = self.getDetectorByIndex(x[0])

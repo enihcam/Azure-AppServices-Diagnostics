@@ -1,5 +1,5 @@
 import os, json, time
-import logging, asyncio
+import logging, asyncio, numpy as np
 from gensim.models import TfidfModel
 from gensim import corpora, similarities
 from __app__.AppSettings.AppSettings import appSettings
@@ -8,6 +8,7 @@ from __app__.TrainingModule.StorageAccountHelper import StorageAccountHelper
 from __app__.TrainingModule.DetectorsFetchHelper import getAllDetectors
 from __app__.TestingModule.TextSearchModule import loadModel
 from __app__.TestingModule.TestSchema import TestCase
+from __app__.TrainingModule.Word2VecProvider import Word2VecProvider
 
 
 class TrainingException(Exception):
@@ -41,15 +42,22 @@ def trainDictionary(alltokens, productid, outpath):
     dictionary = corpora.Dictionary(alltokens)
     dictionary.save(os.path.join(outpath, "dictionary.dict"))
     
-def trainModelM1(detector_tokens, sampleUtterances_tokens, productid, outpath):
+def trainModelM1(detector_tokens, productid, outpath, useWord2Vec=False):
     dictionary = corpora.Dictionary.load(os.path.join(outpath, "dictionary.dict"))
     corpus = [dictionary.doc2bow(line) for line in detector_tokens]
     model = TfidfModel(corpus)
-    index = similarities.MatrixSimilarity(model[corpus])
     model.save(os.path.join(outpath, "m1.model"))
-    index.save(os.path.join(outpath, "m1.index"))
+    if useWord2Vec:
+        logging.info("Use word2vec is enabled")
+        w2vProvider = Word2VecProvider()
+        w2vProvider.extractSubset(dictionary, os.path.join(outpath, "word2vec.dat"))
+        index = w2vProvider.getSentenceVector(model[corpus])
+        np.save(os.path.join(outpath, "m1.dat"), index)
+    else:
+        index = similarities.MatrixSimilarity(model[corpus])
+        index.save(os.path.join(outpath, "m1.index"))
 
-def trainModelM2(detector_tokens, sampleUtterances_tokens, productid, outpath):
+def trainModelM2(sampleUtterances_tokens, productid, outpath):
     dictionary = corpora.Dictionary.load(os.path.join(outpath, "dictionary.dict"))
     corpus = [dictionary.doc2bow(line) for line in sampleUtterances_tokens]
     model = TfidfModel(corpus)
@@ -117,7 +125,7 @@ async def trainModel(trainingId, productid, trainingConfig):
         raise TrainingException("DictionaryTrainer: " + str(e))
     if trainingConfig.trainDetectors:
         try:
-            trainModelM1(detector_tokens, sampleUtterances_tokens, productid, outpath)
+            trainModelM1(detector_tokens, productid, outpath, trainingConfig.useWord2Vec)
             logging.info("ModelM1Trainer: Sucessfully trained model m1")
         except Exception as e:
             logging.error("[ERROR]ModelM1Trainer: " + str(e))
@@ -127,7 +135,7 @@ async def trainModel(trainingId, productid, trainingConfig):
         logging.info("ModelM1Trainer: Training is disabled")
     if trainingConfig.trainUtterances:
         try:
-            trainModelM2(detector_tokens, sampleUtterances_tokens, productid, outpath)
+            trainModelM2(sampleUtterances_tokens, productid, outpath)
             logging.info("ModelM2Trainer: Sucessfully trained model m2")
         except Exception as e:
             logging.error("[ERROR]ModelM2Trainer: " + str(e))
@@ -135,7 +143,7 @@ async def trainModel(trainingId, productid, trainingConfig):
     open(os.path.join(outpath, "trainingId.txt"), "w").write(str(trainingId))
     open(os.path.join(outpath, "Detectors.json"), "w").write(json.dumps(detectors))
     open(os.path.join(outpath, "SampleUtterances.json"), "w").write(json.dumps(sampleUtterances))
-    modelInfo = {"detectorContentSplitted": trainingConfig.detectorContentSplitted, "textNGrams": trainingConfig.textNGrams}
+    modelInfo = {"detectorContentSplitted": trainingConfig.detectorContentSplitted, "textNGrams": trainingConfig.textNGrams, "useWord2Vec": trainingConfig.useWord2Vec}
     open(os.path.join(outpath, "ModelInfo.json"), "w").write(json.dumps(modelInfo))
     if testModelForSearch(productid):
         await publishModels(productid, trainingId)

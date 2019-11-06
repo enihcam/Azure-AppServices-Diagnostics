@@ -12,6 +12,7 @@ class TrainingConfig:
 		self.extractionRatio = trainingConfig.get("extractionRatio", 0.1)
 		self.caseTitlesDaysSince = trainingConfig.get("caseTitlesDaysSince", 50)
 		
+		self.useWord2Vec = trainingConfig.get("useWord2Vec", False)
 		self.textNGrams = trainingConfig.get("textNGrams", 1)
 		self.detectorContentSplitted = trainingConfig.get("detectorContentSplitted", False)
 		self.trainDetectors = trainingConfig.get("trainDetectors", False)

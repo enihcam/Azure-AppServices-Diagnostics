@@ -2,7 +2,6 @@ import nltk, os
 from nltk import ngrams
 import itertools
 from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
 
 try:
     nltk.data.find('tokenizers/punkt')
@@ -17,11 +16,10 @@ try:
 except LookupError:
     nltk.download('wordnet')
 
-lemmatizer = WordNetLemmatizer()
 stop = stopwords.words('english')
 
 def tokenize_text(txt):
-    return [lemmatizer.lemmatize(word) for word in nltk.word_tokenize(txt.lower()) if word not in stop]
+    return [word for word in nltk.word_tokenize(txt.lower()) if word not in stop]
 
 def getNGrams(sentence, n):
     return [' '.join(list(x)) for x in ngrams(tokenize_text(sentence), n)]

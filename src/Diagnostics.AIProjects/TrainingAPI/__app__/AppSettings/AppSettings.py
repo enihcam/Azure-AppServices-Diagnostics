@@ -18,4 +18,6 @@ class AppSettings:
         self.DETECTORS_CLIENT_ID = config.get("DETECTORS_CLIENT_ID", None)
         self.DETECTORS_CLIENT_SECRET = config.get("DETECTORS_CLIENT_SECRET", None)
         self.DETECTORS_APP_RESOURCE = config.get("DETECTORS_APP_RESOURCE", None)
+        self.WORD2VEC_PATH = config.get("WORD2VEC_PATH", None)
+        self.WORD2VEC_MODEL_NAME = config.get("WORD2VEC_MODEL_NAME", None)
 appSettings = AppSettings()
